@@ -187,7 +187,7 @@ def require_validate(spec):
     return load_func(code, "validate")
 
 
-def load_tests(dirpath, tag_filter):
+def load_tests(dirpath, name_filter, tag_filter):
     tests = []
     for p in sorted(Path(dirpath).glob("*.yaml")):
         try:
@@ -199,6 +199,8 @@ def load_tests(dirpath, tag_filter):
         data.setdefault("tags", [])
         data.setdefault("params", {})
         data.setdefault("env", {})
+        if name_filter and data.get("name") not in set(name_filter):
+            continue
         if tag_filter and not (set(tag_filter) & set(data.get("tags", []))):
             continue
         tests.append(data)
@@ -208,6 +210,7 @@ def load_tests(dirpath, tag_filter):
 def main():
     ap = argparse.ArgumentParser(prog="unframe", description="Tiny YAML-driven test runner")
     ap.add_argument("-d", "--dir", required=True, help="tests directory (YAML files)")
+    ap.add_argument("-n", "--name", action="append", help="run tests matching this name (repeatable)")
     ap.add_argument("-t", "--tag", action="append", help="run tests matching this tag (repeatable)")
     ap.add_argument("-v", "--verbose", action="store_true")
     ap.add_argument("--sysenv", default="generic:default", help="label in perflogs")
@@ -225,7 +228,7 @@ def main():
         print("Invalid --extra-args JSON: {}".format(e), file=sys.stderr)
         sys.exit(2)
 
-    tests = load_tests(args.dir, args.tag or [])
+    tests = load_tests(args.dir, args.name or [], args.tag or [])
     if not tests:
         print("No tests selected.", file=sys.stderr)
         sys.exit(2)
