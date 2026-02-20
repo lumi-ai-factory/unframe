@@ -218,6 +218,7 @@ def main():
     ap.add_argument("--prefix", default="out", help="output prefix (perflogs/...)")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--extra-args", default="{}", help='JSON dict for templating (e.g. \'{"account":"proj","partition":"dev-g"}\')')
+    ap.add_argument("--extra-args-file", help="path to JSON file for templating")
     args = ap.parse_args()
 
     try:
@@ -227,6 +228,11 @@ def main():
     except Exception as e:
         print("Invalid --extra-args JSON: {}".format(e), file=sys.stderr)
         sys.exit(2)
+
+    # Update extra args with file contents
+    if args.extra_args_file:
+        with open(args.extra_args_file) as f:
+            extra_args.update(json.load(f))
 
     tests = load_tests(args.dir, args.name or [], args.tag or [])
     if not tests:
