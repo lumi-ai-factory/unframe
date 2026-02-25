@@ -105,11 +105,14 @@ def cartesian_params(param_dict):
     return combos
 
 
-def run_argv(argv, env, cwd, timeout):
+def run_argv(argv, env, cwd, timeout, verbose=False):
     env_all = os.environ.copy()
     env_all.update({k: str(v) for k, v in env.items()})
     t0 = time.time()
-    #print("argv:", " ".join(argv))
+
+    if verbose:
+        print("argv:", " ".join(argv))
+
     proc = subprocess.run(
         argv,
         cwd=cwd,
@@ -121,7 +124,10 @@ def run_argv(argv, env, cwd, timeout):
         proc.stdout = proc.stdout.decode("utf-8", "replace")
     if isinstance(proc.stderr, bytes):
         proc.stderr = proc.stderr.decode("utf-8", "replace")
-    #print("proc.stdout:", proc.stdout)
+
+    if verbose:
+        print("proc.stdout:", proc.stdout)
+        print("proc.stderr:", proc.stderr)
 
     dt = time.time() - t0
     return proc.returncode, proc.stdout, proc.stderr, dt
@@ -181,7 +187,7 @@ def require_validate(spec):
     return load_func(code, "validate")
 
 
-def load_tests(dirpath, tag_filter):
+def load_tests(dirpath, name_filter, tag_filter):
     tests = []
     for p in sorted(Path(dirpath).glob("*.yaml")):
         try:
@@ -193,6 +199,8 @@ def load_tests(dirpath, tag_filter):
         data.setdefault("tags", [])
         data.setdefault("params", {})
         data.setdefault("env", {})
+        if name_filter and data.get("name") not in set(name_filter):
+            continue
         if tag_filter and not (set(tag_filter) & set(data.get("tags", []))):
             continue
         tests.append(data)
@@ -202,12 +210,15 @@ def load_tests(dirpath, tag_filter):
 def main():
     ap = argparse.ArgumentParser(prog="unframe", description="Tiny YAML-driven test runner")
     ap.add_argument("-d", "--dir", required=True, help="tests directory (YAML files)")
+    ap.add_argument("-n", "--name", action="append", help="run tests matching this name (repeatable)")
     ap.add_argument("-t", "--tag", action="append", help="run tests matching this tag (repeatable)")
+    ap.add_argument("-v", "--verbose", action="store_true")
     ap.add_argument("--sysenv", default="generic:default", help="label in perflogs")
     ap.add_argument("--timeout", type=int, default=None, help="per-run timeout (seconds)")
     ap.add_argument("--prefix", default="out", help="output prefix (perflogs/...)")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--extra-args", default="{}", help='JSON dict for templating (e.g. \'{"account":"proj","partition":"dev-g"}\')')
+    ap.add_argument("--extra-args-file", help="path to JSON file for templating")
     args = ap.parse_args()
 
     try:
@@ -218,7 +229,12 @@ def main():
         print("Invalid --extra-args JSON: {}".format(e), file=sys.stderr)
         sys.exit(2)
 
-    tests = load_tests(args.dir, args.tag or [])
+    # Update extra args with file contents
+    if args.extra_args_file:
+        with open(args.extra_args_file) as f:
+            extra_args.update(json.load(f))
+
+    tests = load_tests(args.dir, args.name or [], args.tag or [])
     if not tests:
         print("No tests selected.", file=sys.stderr)
         sys.exit(2)
@@ -231,7 +247,7 @@ def main():
         param_space = cartesian_params(spec.get("params", {}))
         pkeys = list(spec.get("params", {}).keys())
 
-        print("\n=== {} ({} permutations) ===".format(name, len(param_space)))
+        print("\n## {} ({} permutations)".format(name, len(param_space)))
         if desc:
             print(desc)
         if pkeys:
@@ -273,7 +289,9 @@ def main():
 
             # run
             try:
-                rc, out, err, dt = run_argv(argv, env_vars, spec.get("workdir"), args.timeout)
+                rc, out, err, dt = run_argv(
+                    argv, env_vars, spec.get("workdir"), args.timeout, verbose=args.verbose,
+                )
             except subprocess.TimeoutExpired:
                 line = " ".join("{:>14s}".format(str(params.get(k, ""))) for k in pkeys) if pkeys else ""
                 print((line + " ").rstrip(), "[FAIL]", "timeout")
