@@ -247,7 +247,11 @@ def main():
         param_space = cartesian_params(spec.get("params", {}))
         pkeys = list(spec.get("params", {}).keys())
 
-        print("\n## {} ({} permutations)".format(name, len(param_space)))
+        if len(param_space) > 1:
+            print("\n## {} ({} permutations)\n".format(name, len(param_space)))
+        else:
+            print("\n## {}\n".format(name))
+
         if desc:
             print(desc)
         if pkeys:
