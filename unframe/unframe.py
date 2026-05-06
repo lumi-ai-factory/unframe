@@ -119,11 +119,9 @@ def run_argv(argv, env, cwd, timeout, verbose=False):
         env=env_all,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        encoding="utf-8",
+        text=True,
     )
-    if isinstance(proc.stdout, bytes):
-        proc.stdout = proc.stdout.decode("utf-8", "replace")
-    if isinstance(proc.stderr, bytes):
-        proc.stderr = proc.stderr.decode("utf-8", "replace")
 
     if verbose:
         print("proc.stdout:", proc.stdout)
