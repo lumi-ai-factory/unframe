@@ -118,14 +118,14 @@ def log_stdio(stream, file):
     return "\n".join(lines)
 
 
-def run_argv(argv, env, cwd, timeout, prefix, name, timestamp, params):
+def run_argv(argv, env, cwd, timeout, prefix, name, iolog_timestamp, params):
     env_all = os.environ.copy()
     env_all.update({k: str(v) for k, v in env.items()})
     t0 = time.time()
 
-    outdir = Path(prefix) / "stdio"
+    outdir = Path(prefix) / "stdio" / iolog_timestamp
     outdir.mkdir(parents=True, exist_ok=True)
-    stdio_file = outdir / f"{name}-{timestamp}.out"
+    stdio_file = outdir / f"{name}.out"
 
     returncode = 1  # Default to fail
     stdout = ""
@@ -275,12 +275,13 @@ def main():
 
     any_fail = False
 
+    iolog_timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
     for spec in tests:
         name = spec.get("name") or Path(spec["_file"]).stem
         desc = spec.get("description", "")
         param_space = cartesian_params(spec.get("params", {}))
         pkeys = list(spec.get("params", {}).keys())
-        stdio_log_timestamp = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
 
         if len(param_space) > 1:
             print("\n## {} ({} permutations)\n".format(name, len(param_space)))
@@ -330,7 +331,7 @@ def main():
             try:
                 rc, out, err, dt = run_argv(
                     argv, env_vars, spec.get("workdir"), args.timeout,
-                    args.prefix, name, stdio_log_timestamp, params
+                    args.prefix, name, iolog_timestamp, params
                 )
             except subprocess.TimeoutExpired:
                 line = " ".join("{:>14s}".format(str(params.get(k, ""))) for k in pkeys) if pkeys else ""
