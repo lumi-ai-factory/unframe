@@ -22,6 +22,7 @@ Runner:
 """
 
 import argparse
+import concurrent.futures
 import csv
 import itertools
 import json
@@ -105,7 +106,19 @@ def cartesian_params(param_dict):
     return combos
 
 
-def run_argv(argv, env, cwd, timeout, verbose=False):
+def log_stdio(stream, file):
+    """
+    Read lines from IO stream.
+    Write to a file for debugging and into memory for further processing.
+    """
+    lines = []
+    for line in stream:
+        lines.append(line)
+        file.write(line)
+    return "\n".join(lines)
+
+
+def run_argv(argv, env, cwd, timeout, prefix, name, timestamp, params, verbose=False):
     env_all = os.environ.copy()
     env_all.update({k: str(v) for k, v in env.items()})
     t0 = time.time()
@@ -113,23 +126,53 @@ def run_argv(argv, env, cwd, timeout, verbose=False):
     if verbose:
         print("argv:", " ".join(argv))
 
-    proc = subprocess.run(
-        argv,
-        cwd=cwd,
-        env=env_all,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        encoding="utf-8",
-        errors="replace",
-        text=True,
-    )
+    outdir = Path(prefix) / "stdio"
+    outdir.mkdir(parents=True, exist_ok=True)
+    stdio_file = outdir / f"{name}-{timestamp}.out"
+
+    returncode = 1  # Default to fail
+    stdout = ""
+    stderr = ""
+
+    with open(stdio_file, "a", buffering=1) as file:
+        file.write(f"params:\n{params}\n\n")
+        file.write(f"argv:\n{' '.join(argv)}\n")
+        file.write(f"stdio:\n")
+
+        try:
+            proc = subprocess.Popen(
+                argv,
+                cwd=cwd,
+                env=env_all,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                encoding="utf-8",
+                errors="replace",
+                text=True,
+            )
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                future_out = executor.submit(log_stdio, proc.stdout, file)
+                future_err = executor.submit(log_stdio, proc.stderr, file)
+
+                proc.wait(timeout)
+
+                returncode = proc.returncode
+                stdout = future_out.result()
+                stderr = future_err.result()
+
+        except Exception as err:
+            file.write(str(err) + "\n")
+
+        finally:
+            file.write(40 * "#" + "\n")
 
     if verbose:
-        print("proc.stdout:", proc.stdout)
-        print("proc.stderr:", proc.stderr)
+        print("proc.stdout:", stdout)
+        print("proc.stderr:", stderr)
 
     dt = time.time() - t0
-    return proc.returncode, proc.stdout, proc.stderr, dt
+    return returncode, stdout, stderr, dt
 
 
 def write_perflog(prefix, sysenv, testname, params, duration_s, status, message, results):
@@ -245,6 +288,7 @@ def main():
         desc = spec.get("description", "")
         param_space = cartesian_params(spec.get("params", {}))
         pkeys = list(spec.get("params", {}).keys())
+        stdio_log_timestamp = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
 
         if len(param_space) > 1:
             print("\n## {} ({} permutations)\n".format(name, len(param_space)))
@@ -293,7 +337,8 @@ def main():
             # run
             try:
                 rc, out, err, dt = run_argv(
-                    argv, env_vars, spec.get("workdir"), args.timeout, verbose=args.verbose,
+                    argv, env_vars, spec.get("workdir"), args.timeout, args.prefix, name,
+                    stdio_log_timestamp, params, verbose=args.verbose,
                 )
             except subprocess.TimeoutExpired:
                 line = " ".join("{:>14s}".format(str(params.get(k, ""))) for k in pkeys) if pkeys else ""
