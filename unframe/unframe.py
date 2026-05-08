@@ -120,6 +120,7 @@ def run_argv(argv, env, cwd, timeout, verbose=False):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         encoding="utf-8",
+        errors="replace",
         text=True,
     )
 
