@@ -118,13 +118,10 @@ def log_stdio(stream, file):
     return "\n".join(lines)
 
 
-def run_argv(argv, env, cwd, timeout, prefix, name, timestamp, params, verbose=False):
+def run_argv(argv, env, cwd, timeout, prefix, name, timestamp, params):
     env_all = os.environ.copy()
     env_all.update({k: str(v) for k, v in env.items()})
     t0 = time.time()
-
-    if verbose:
-        print("argv:", " ".join(argv))
 
     outdir = Path(prefix) / "stdio"
     outdir.mkdir(parents=True, exist_ok=True)
@@ -166,10 +163,6 @@ def run_argv(argv, env, cwd, timeout, prefix, name, timestamp, params, verbose=F
 
         finally:
             file.write(40 * "#" + "\n")
-
-    if verbose:
-        print("proc.stdout:", stdout)
-        print("proc.stderr:", stderr)
 
     dt = time.time() - t0
     return returncode, stdout, stderr, dt
@@ -254,7 +247,6 @@ def main():
     ap.add_argument("-d", "--dir", required=True, help="tests directory (YAML files)")
     ap.add_argument("-n", "--name", action="append", help="run tests matching this name (repeatable)")
     ap.add_argument("-t", "--tag", action="append", help="run tests matching this tag (repeatable)")
-    ap.add_argument("-v", "--verbose", action="store_true")
     ap.add_argument("--sysenv", default="generic:default", help="label in perflogs")
     ap.add_argument("--timeout", type=int, default=None, help="per-run timeout (seconds)")
     ap.add_argument("--prefix", default="out", help="output prefix (perflogs/...)")
@@ -337,8 +329,8 @@ def main():
             # run
             try:
                 rc, out, err, dt = run_argv(
-                    argv, env_vars, spec.get("workdir"), args.timeout, args.prefix, name,
-                    stdio_log_timestamp, params, verbose=args.verbose,
+                    argv, env_vars, spec.get("workdir"), args.timeout,
+                    args.prefix, name, stdio_log_timestamp, params
                 )
             except subprocess.TimeoutExpired:
                 line = " ".join("{:>14s}".format(str(params.get(k, ""))) for k in pkeys) if pkeys else ""
