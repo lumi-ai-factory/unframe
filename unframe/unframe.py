@@ -133,7 +133,7 @@ def run_argv(argv, env, cwd, timeout, prefix, name, iolog_timestamp, params):
 
     with open(stdio_file, "a", buffering=1) as file:
         file.write(f"params:\n{params}\n\n")
-        file.write(f"argv:\n{' '.join(argv)}\n")
+        file.write(f"argv:\n{argv}\n\n")
         file.write(f"stdio:\n")
 
         try:
