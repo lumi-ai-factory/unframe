@@ -145,7 +145,6 @@ def run_argv(argv, env, cwd, timeout, prefix, name, iolog_timestamp, params):
                 stderr=subprocess.PIPE,
                 encoding="utf-8",
                 errors="replace",
-                text=True,
             )
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
