@@ -3,7 +3,9 @@
 
 import argparse
 import json
+import subprocess
 import sys
+import time
 import yaml
 
 from itertools import chain
@@ -140,8 +142,29 @@ def generate(args: argparse.Namespace) -> list:
     return scripts
 
 
-def execute(args: argparse.Namespace):
-    raise NotImplementedError
+def execute(args: argparse.Namespace) -> list:
+    stdio_files = []
+    job_ids = []
+
+    # Create output directory
+    timestamp = time.localtime().strftime("%Y-%m-%dT%H%M%S")
+    stdio_dir = args.stdio_dir / timestamp
+    stdio_dir.mkdir(parents=True, exist_ok=True)
+
+    scripts_dir = args.scripts_dir
+
+    for script in scripts_dir.glob("*.sh"):
+        stdio_path = stdio_dir / (script.stem + ".out")
+
+        proc = subprocess.run(
+            ["sbatch", script, "-o", stdio_path, "--parsable"],
+            capture_output=True,
+        )
+
+        stdio_files.append(str(stdio_path))
+        job_ids.append(proc.stdout)
+
+    return timestamp, stdio_files, job_ids
 
 
 def validate(args: argparse.Namespace):
