@@ -107,13 +107,13 @@ def main():
     # Parser for `run` subcommand
     parser_run = subparsers.add_parser("run", help="Run test scripts")
     parser_run.add_argument("scripts_dir", type=Path, help="Path to test scripts input dir")
-    parser_run.add_argument("scores_dir", type=Path, help="Path to test scores output dir")
+    parser_run.add_argument("stdio_dir", type=Path, help="Path to test stdio output dir")
     parser_run.set_defaults(func=run)
 
     # Parser for `validate` subcommand
     parser_val = subparsers.add_parser("validate", help="Validate test results")
     parser_val.add_argument("defs_dir", type=Path, help="Path to YAML test definitions input dir")
-    parser_val.add_argument("scores_dir", type=Path, help="Path to test scores input dir")
+    parser_val.add_argument("stdio_dir", type=Path, help="Path to test stdio input dir")
     parser_val.add_argument("results_dir", type=Path, help="Path to test results output dir")
     parser_val.set_defaults(func=validate)
 
