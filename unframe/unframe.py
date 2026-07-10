@@ -7,6 +7,7 @@ import sys
 import yaml
 
 from itertools import chain
+from jinja2 import Environment
 from pathlib import Path
 
 
@@ -35,8 +36,38 @@ def get_shared_params(params_dict: dict, params_file: Path) -> dict:
     return params
 
 
-def generate(definitions: list, shared_params: dict, args: argparse.Namespace):
-    raise NotImplementedError
+def preprocess_params(test_params: dict, shared_params: dict) -> dict:
+    params = {}
+
+    for d in shared_params, test_params:  # Test params take precedence
+        for k, v in d.items():
+            if isinstance(v, list):
+                params[k] = " ".join([f'"{x}"' for x in v])
+            else:
+                params[k] = v
+
+    return params
+
+
+def generate(definitions: list, shared_params: dict, args: argparse.Namespace) -> list:
+    scripts = []
+
+    scripts_dir = args.scripts_dir
+    scripts_dir.mkdir(parents=True, exist_ok=True)
+
+    env = Environment()
+
+    for dfn in definitions:
+        template = env.from_string(dfn["job"])
+        params = preprocess_params(test_params=dfn["params"], shared_params=shared_params)
+        job_string = template.render(params=params, command=dfn["command"])
+
+        script_file = scripts_dir / (dfn["name"] + ".sh")
+        with script_file.open(mode="w") as f:
+            f.write(job_string)
+        scripts.append(str(script_file))
+
+    return scripts
 
 
 def run(definitions: list, shared_params: dict, args: argparse.Namespace):
@@ -90,7 +121,8 @@ def main():
     shared_params = get_shared_params(params_dict=args.params, params_file=args.params_file)
 
     # Execute operation defined by subcommand
-    args.func(definitions=definitions, shared_params=shared_params, args=args)
+    result = args.func(definitions=definitions, shared_params=shared_params, args=args)
+    print(result)
 
 
 if __name__ == "__main__":
