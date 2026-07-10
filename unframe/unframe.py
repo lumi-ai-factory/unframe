@@ -49,12 +49,22 @@ def preprocess_params(test_params: dict, shared_params: dict) -> dict:
     return params
 
 
-def generate(definitions: list, shared_params: dict, args: argparse.Namespace) -> list:
+def generate(args: argparse.Namespace) -> list:
     scripts = []
 
+    # Load test definitions
+    definitions = load_defs(path=args.defs_dir)
+    if not definitions:
+        sys.exit("No YAML files provided.")
+
+    # Define parameters shared by all tests
+    shared_params = get_shared_params(params_dict=args.params, params_file=args.params_file)
+
+    # Ensure output directory exists
     scripts_dir = args.scripts_dir
     scripts_dir.mkdir(parents=True, exist_ok=True)
 
+    # Initialize template environment
     env = Environment()
 
     for dfn in definitions:
@@ -70,35 +80,32 @@ def generate(definitions: list, shared_params: dict, args: argparse.Namespace) -
     return scripts
 
 
-def run(definitions: list, shared_params: dict, args: argparse.Namespace):
+def run(args: argparse.Namespace):
     raise NotImplementedError
 
 
-def validate(definitions: list, shared_params: dict, args: argparse.Namespace):
+def validate(args: argparse.Namespace):
     raise NotImplementedError
 
 
 def main():
     parser = argparse.ArgumentParser(prog="unframe", description="Tiny YAML-driven test runner")
-    parser.add_argument(
-        "-p", "--params", type=dict,
-        help="JSON string containing a dictionary of shared parameters",
-    )
-    parser.add_argument(
-        "--params-file", "--pf", type=Path,
-        help="Path to JSON file containing a dictionary of shared parameters",
-    )
     subparsers = parser.add_subparsers(required=True)
 
     # Parser for `generate` subcommand
     parser_gen = subparsers.add_parser("generate", help="Generate test scripts")
     parser_gen.add_argument("defs_dir", type=Path, help="Path to YAML test definitions input dir")
     parser_gen.add_argument("scripts_dir", type=Path, help="Path to test scripts output dir")
+    parser_gen.add_argument(
+        "-p", "--params", type=dict, help="JSON string with shared parameters dict",
+    )
+    parser_gen.add_argument(
+        "--params-file", "--pf", type=Path, help="Path to JSON file with shared parameters dict",
+    )
     parser_gen.set_defaults(func=generate)
 
     # Parser for `run` subcommand
     parser_run = subparsers.add_parser("run", help="Run test scripts")
-    parser_run.add_argument("defs_dir", type=Path, help="Path to YAML test definitions input dir")
     parser_run.add_argument("scripts_dir", type=Path, help="Path to test scripts input dir")
     parser_run.add_argument("scores_dir", type=Path, help="Path to test scores output dir")
     parser_run.set_defaults(func=run)
@@ -112,16 +119,8 @@ def main():
 
     args = parser.parse_args()
 
-    # Load test definitions
-    definitions = load_defs(path=args.defs_dir)
-    if not definitions:
-        sys.exit("No YAML files provided.")
-
-    # Define parameters shared by all tests
-    shared_params = get_shared_params(params_dict=args.params, params_file=args.params_file)
-
-    # Execute operation defined by subcommand
-    result = args.func(definitions=definitions, shared_params=shared_params, args=args)
+    # Execute operation defined by subcommand, print output
+    result = args.func(args)
     print(result)
 
 
