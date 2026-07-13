@@ -147,7 +147,7 @@ def execute(args: argparse.Namespace) -> list:
     job_ids = []
 
     # Create output directory
-    timestamp = time.localtime().strftime("%Y-%m-%dT%H%M%S")
+    timestamp = time.strftime("%Y-%m-%dT%H%M%S")
     stdio_dir = args.stdio_dir / timestamp
     stdio_dir.mkdir(parents=True, exist_ok=True)
 
