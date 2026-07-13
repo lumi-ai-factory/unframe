@@ -26,7 +26,9 @@ job: |
   for rank0_gcd in {{ params.rank0_gcd }}; do
     for rank1_gcd in {{ params.rank1_gcd }}; do
       for transfer_size in {{ params.transfer_size }}; do
-        srun singularity run "{{ params.container }}" bash -c "{{ command }}"
+        echo "rank0_gcd=${rank0_gcd},rank1_gcd=${rank1_gcd},transfer_size=${transfer_size}"
+        srun -Q singularity run "{{ params.container }}" bash -c "{{ command }}"
+        echo
       done
     done
   done
