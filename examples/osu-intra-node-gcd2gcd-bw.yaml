@@ -32,12 +32,12 @@ job: |
   done
 
 command: |
-  if [[ $PMI_RANK -eq 0 ]]; then
+  if [[ \$PMI_RANK -eq 0 ]]; then
     export ROCR_VISIBLE_DEVICES=${rank0_gcd};
-  elif [[ $PMI_RANK -eq 1 ]]; then
+  elif [[ \$PMI_RANK -eq 1 ]]; then
     export ROCR_VISIBLE_DEVICES=${rank1_gcd};
   else
-    echo "unexpected rank $PMI_RANK" >&2; exit 1;
+    echo \"unexpected rank \$PMI_RANK\" >&2; exit 1;
   fi
   /usr/libexec/osu-micro-benchmarks/mpi/pt2pt/osu_bw -m ${transfer_size}:${transfer_size} D D
 
