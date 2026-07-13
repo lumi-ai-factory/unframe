@@ -159,10 +159,11 @@ def execute(args: argparse.Namespace) -> list:
         proc = subprocess.run(
             ["sbatch", "-o", stdio_path, "--parsable", script],
             capture_output=True,
+            universal_newlines=True,
         )
 
         stdio_files.append(str(stdio_path))
-        job_ids.append(proc.stdout)
+        job_ids.append(proc.stdout.strip())
 
     return timestamp, stdio_files, job_ids
 
