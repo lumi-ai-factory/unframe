@@ -157,7 +157,7 @@ def execute(args: argparse.Namespace) -> list:
         stdio_path = stdio_dir / (script.stem + ".out")
 
         proc = subprocess.run(
-            ["sbatch", script, "-o", stdio_path, "--parsable"],
+            ["sbatch", "-o", stdio_path, "--parsable", script],
             capture_output=True,
         )
 
