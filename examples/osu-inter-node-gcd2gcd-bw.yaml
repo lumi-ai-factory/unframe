@@ -18,6 +18,7 @@ job: |
   #SBATCH --nodes=2
   #SBATCH --partition=dev-g
   #SBATCH --account={{ params.account }}
+  #SBATCH --time=15
 
   module purge
   module load Local-LAIF lumi-aif-singularity-bindings
