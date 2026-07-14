@@ -96,6 +96,17 @@ def log_results(results, res_path: Path, timestamp: str, test_name: str = ""):
             raise TypeError(f"Unknown result type: {type(results)}")
 
 
+def get_param_cli_args(param_dict: dict, param_file: Path) -> list:
+    param_args = []
+
+    if param_dict:
+        param_args += ["-p", json.dumps(param_dict)]
+    if param_file:
+        param_args += ["--pf", str(param_file)]
+
+    return param_args
+
+
 def generate(def_dir: Path, job_dir: Path, params: dict = None, param_file: Path = None) -> list:
     jobs = []
 
@@ -200,7 +211,28 @@ def run(
     def_dir: Path, job_dir: Path, out_dir: Path, res_dir: Path, params: dict = None,
     param_file: Path = None,
 ):
-    raise NotImplementedError
+    # Get Slurm account from shared params for submitting aggregation job
+    shared_params = get_shared_params(param_dict=params, param_file=param_file)
+    account = shared_params.get("account")
+    if not account:
+        sys.exit("Must provide Slurm account (`account`) as a shared parameter.")
+
+    jobs = generate(def_dir, job_dir, params, param_file)
+    timestamp, out_files, job_ids = execute(job_dir, out_dir)
+
+    out_dir = out_dir / timestamp
+    res_dir = res_dir
+
+    args_validate = [
+        "srun", "-A", account, "-d", ",".join(job_ids), "-p", "debug",
+        sys.argv[0], "validate", def_dir, out_dir, res_dir,
+    ]
+    args_validate += get_param_cli_args(param_dict=params, param_file=param_file)
+
+    proc = subprocess.run(args_validate, capture_output=True, universal_newlines=True)
+    summary_path = proc.stdout.strip()
+
+    return summary_path
 
 
 def main():
