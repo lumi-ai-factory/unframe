@@ -150,7 +150,8 @@ def execute(job_dir: Path, out_dir: Path) -> list:
 
         proc = subprocess.run(
             ["sbatch", "-o", out_path, "--parsable", script],
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             universal_newlines=True,
         )
 
@@ -229,7 +230,12 @@ def run(
     ]
     args_validate += get_param_cli_args(param_dict=params, param_file=param_file)
 
-    proc = subprocess.run(args_validate, capture_output=True, universal_newlines=True)
+    proc = subprocess.run(
+        args_validate,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+    )
     summary_path = proc.stdout.strip()
 
     return summary_path
