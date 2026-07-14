@@ -1,6 +1,8 @@
 /*.egg-info/
 /.venv/
 /build/
-/out/
+/jobs/
+/output/
+/results/
 /venv/
 __pycache__/
