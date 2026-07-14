@@ -12,65 +12,9 @@ from itertools import chain
 from jinja2 import Environment
 from pathlib import Path
 
-DEFAULT_OUTPUT_DIR = Path("./out")
-DEFAULT_SCRIPTS_DIR = DEFAULT_OUTPUT_DIR / "scripts"
-DEFAULT_STDIO_DIR = DEFAULT_OUTPUT_DIR / "stdio"
-DEFAULT_RESULTS_DIR = DEFAULT_OUTPUT_DIR / "results"
-
-
-def add_parser_gen(subparsers: argparse.Action) -> argparse.ArgumentParser:
-    parser = subparsers.add_parser("generate", help="Generate test scripts")
-
-    parser.add_argument("defs_dir", type=Path, help="Path to YAML test definitions dir")
-    parser.add_argument(
-        "scripts_dir", default=DEFAULT_SCRIPTS_DIR, type=Path, help="Path to test scripts dir",
-    )
-
-    return parser
-
-
-def add_parser_exe(subparsers: argparse.Action) -> argparse.ArgumentParser:
-    parser = subparsers.add_parser("execute", help="Execute test scripts")
-
-    parser.add_argument(
-        "scripts_dir", default=DEFAULT_SCRIPTS_DIR, type=Path, help="Path to test scripts dir",
-    )
-    parser.add_argument(
-        "stdio_dir", default=DEFAULT_STDIO_DIR, type=Path, help="Path to test stdio dir",
-    )
-
-    return parser
-
-
-def add_parser_val(subparsers: argparse.Action) -> argparse.ArgumentParser:
-    parser = subparsers.add_parser("validate", help="Validate test results")
-
-    parser.add_argument("defs_dir", type=Path, help="Path to YAML test definitions dir")
-    parser.add_argument(
-        "stdio_dir", default=DEFAULT_STDIO_DIR, type=Path, help="Path to test stdio dir",
-    )
-    parser.add_argument(
-        "results_dir", default=DEFAULT_RESULTS_DIR, type=Path, help="Path to test results dir",
-    )
-
-    return parser
-
-
-def add_parser_run(subparsers: argparse.Action) -> argparse.ArgumentParser:
-    parser = subparsers.add_parser("run", help="Generate, execute and validate tests")
-
-    parser.add_argument("defs_dir", type=Path, help="Path to YAML test definitions dir")
-    parser.add_argument(
-        "scripts_dir", default=DEFAULT_SCRIPTS_DIR, type=Path, help="Path to test scripts dir",
-    )
-    parser.add_argument(
-        "stdio_dir", default=DEFAULT_STDIO_DIR, type=Path, help="Path to test stdio dir",
-    )
-    parser.add_argument(
-        "results_dir", default=DEFAULT_RESULTS_DIR, type=Path, help="Path to test results dir",
-    )
-
-    return parser
+DEFAULT_JOB_DIR = "jobs"
+DEFAULT_OUT_DIR = "output"
+DEFAULT_RES_DIR = "results"
 
 
 def load_defs(path: Path) -> list:
@@ -111,92 +55,95 @@ def aggregate_params(test_params: dict, shared_params: dict) -> dict:
     return params
 
 
-def generate(args: argparse.Namespace) -> list:
-    scripts = []
+def generate(def_dir: Path, job_dir: Path, params: dict = None, param_file: Path = None) -> list:
+    jobs = []
 
-    # Load test definitions
-    definitions = load_defs(path=args.defs_dir)
+    definitions = load_defs(path=def_dir)
     if not definitions:
         sys.exit("No test definitions provided.")
 
-    # Define parameters shared by all tests
-    shared_params = get_shared_params(param_dict=args.params, param_file=args.param_file)
+    shared_params = get_shared_params(param_dict=params, param_file=param_file)
 
-    # Ensure output directory exists
-    scripts_dir = args.scripts_dir
-    scripts_dir.mkdir(parents=True, exist_ok=True)
+    job_dir = job_dir
+    job_dir.mkdir(parents=True, exist_ok=True)
 
-    # Initialize template environment
+    # Initialize Jinja2 template environment
     env = Environment()
 
     for dfn in definitions:
         template = env.from_string(dfn["job"])
-        params = aggregate_params(test_params=dfn["params"], shared_params=shared_params)
+        params = aggregate_params(test_params=dfn.get("params"), shared_params=shared_params)
         job_string = template.render(params=params, command=dfn["command"])
 
-        script_file = scripts_dir / (dfn["name"] + ".sh")
+        script_file = job_dir / (dfn["name"] + ".sh")
         with script_file.open(mode="w") as f:
             f.write(job_string)
-        scripts.append(str(script_file))
+        jobs.append(str(script_file))
 
-    return scripts
+    return jobs
 
 
-def execute(args: argparse.Namespace) -> list:
-    stdio_files = []
+def execute(job_dir: Path, out_dir: Path) -> list:
+    out_files = []
     job_ids = []
 
-    # Create output directory
     timestamp = time.strftime("%Y-%m-%dT%H%M%S")
-    stdio_dir = args.stdio_dir / timestamp
-    stdio_dir.mkdir(parents=True, exist_ok=True)
 
-    scripts_dir = args.scripts_dir
+    job_dir = job_dir
+    out_dir = out_dir / timestamp
+    out_dir.mkdir(parents=True, exist_ok=True)
 
-    for script in scripts_dir.glob("*.sh"):
-        stdio_path = stdio_dir / (script.stem + ".out")
+    for script in job_dir.glob("*.sh"):
+        out_path = out_dir / (script.stem + ".out")
 
         proc = subprocess.run(
-            ["sbatch", "-o", stdio_path, "--parsable", script],
+            ["sbatch", "-o", out_path, "--parsable", script],
             capture_output=True,
             universal_newlines=True,
         )
 
-        stdio_files.append(str(stdio_path))
+        out_files.append(str(out_path))
         job_ids.append(proc.stdout.strip())
 
-    return timestamp, stdio_files, job_ids
+    return timestamp, out_files, job_ids
 
 
-def validate(args: argparse.Namespace):
+def validate(
+    def_dir: Path, out_dir: Path, res_dir: Path, params: dict = None, param_file: Path = None,
+):
     raise NotImplementedError
 
 
-def run(args: argparse.Namespace):
+def run(
+    def_dir: Path, job_dir: Path, out_dir: Path, res_dir: Path, params: dict = None,
+    param_file: Path = None,
+):
     raise NotImplementedError
 
 
 def main():
     parser = argparse.ArgumentParser(prog="unframe", description="Tiny YAML-driven test runner")
-    subparsers = parser.add_subparsers(required=True)
 
-    # Parser for `generate` subcommand
-    parser_gen = add_parser_gen(subparsers)
-    parser_gen.set_defaults(func=generate)
+    parser.add_argument("def_dir", type=Path, help="Path to YAML test definitions dir")
 
-    # Parser for `execute` subcommand
-    parser_exe = add_parser_exe(subparsers)
-    parser_exe.set_defaults(func=execute)
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("-g", "--gen", action="store_true", help="Generate test jobs")
+    group.add_argument("-x", "--exe", action="store_true", help="Execute test jobs")
+    group.add_argument("-l", "--val", action="store_true", help="Validate test jobs")
+    group.add_argument(
+        "-r", "--run", action="store_true", help="Generate, execute and validate test jobs",
+    )
 
-    # Parser for `validate` subcommand
-    parser_val = add_parser_val(subparsers)
-    parser_val.set_defaults(func=validate)
+    parser.add_argument(
+        "-j", "--job-dir", default=DEFAULT_JOB_DIR, type=Path, help="Path to test jobs dir",
+    )
+    parser.add_argument(
+        "-o", "--out-dir", default=DEFAULT_OUT_DIR, type=Path, help="Path to test output dir",
+    )
+    parser.add_argument(
+        "-s", "--res-dir", default=DEFAULT_RES_DIR, type=Path, help="Path to test results dir",
+    )
 
-    # Parser for `run` subcommand
-    parser_run = add_parser_run(subparsers)
-    parser_run.set_defaults(func=run)
-
-    # Shared parameters for tests
     parser.add_argument(
         "-p", "--params", type=dict, help="JSON string with shared parameters dict",
     )
@@ -206,8 +153,19 @@ def main():
 
     args = parser.parse_args()
 
-    # Execute operation defined by subcommand, print output
-    results = args.func(args)
+    if args.gen:
+        results = generate(args.def_dir, args.job_dir, args.params, args.param_file)
+    elif args.exe:
+        results = execute(args.job_dir, args.out_dir)
+    elif args.val:
+        results = validate(args.def_dir, args.out_dir, args.res_dir, args.params, args.param_file)
+    elif args.run:
+        results = run(
+            args.def_dir, args.job_dir, args.out_dir, args.res_dir, args.params, args.param_file,
+        )
+    else:
+        sys.exit("No operation specified.")
+
     print(results)
 
 
