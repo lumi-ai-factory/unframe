@@ -4,6 +4,7 @@
 import argparse
 import csv
 import json
+import shlex
 import subprocess
 import sys
 import time
@@ -223,20 +224,30 @@ def run(
 
     out_dir = out_dir / timestamp
     res_dir = res_dir / out_dir.parts[-1]
+    param_args = get_param_cli_args(param_dict=params, param_file=param_file)
 
-    args_validate = [
-        "srun", "-A", account, "-d", ",".join(job_ids), "-p", "debug",
-        sys.argv[0], "validate", def_dir, out_dir, res_dir,
+    val_submit_args = [
+        "sbatch", "-A", account, "-d", ",".join(job_ids),
+        "-J", "unframe", "-p", "debug", "--parsable",
     ]
-    args_validate += get_param_cli_args(param_dict=params, param_file=param_file)
 
-    proc = subprocess.run(
-        args_validate,
+    val_script_str = (
+        "#!/bin/bash\n"
+        f"{sys.argv[0]} -l -o {out_dir} -s {res_dir} "
+        f"{' '.join(shlex.quote(str(arg)) for arg in param_args)} "
+        f"{def_dir}\n"
+    )
+
+    proc = subprocess.Popen(
+        val_submit_args,
+        stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         universal_newlines=True,
     )
-    summary_path = proc.stdout.strip()
+    outs, errs = proc.communicate(val_script_str)
+
+    summary_path = outs.strip()
 
     return summary_path
 
