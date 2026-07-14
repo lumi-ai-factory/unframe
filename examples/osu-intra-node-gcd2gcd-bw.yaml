@@ -51,6 +51,7 @@ parse: |
       import re
       from itertools import product
 
+      PARAM_TEMPLATE = "rank0_gcd={rank0_gcd},rank1_gcd={rank1_gcd},transfer_size={transfer_size}"
       BW_TEMPLATE = r"{transfer_size}\s+([0-9]+\.[0-9]+)"
 
       results = [
@@ -61,7 +62,9 @@ parse: |
       lines = text.splitlines()
       for i in range(len(results)):
           rank0_gcd, rank1_gcd, transfer_size = results[i].values()
-          param_pattern = f"{rank0_gcd=},{rank1_gcd=},{transfer_size=}"
+          param_pattern = param_template.format(
+              rank0_gcd=rank0_gcd, rank1_gcd=rank1_gcd, transfer_size=transfer_size,
+          )
           bw_pattern = BW_TEMPLATE.format(transfer_size=transfer_size)
 
           for j in range(len(lines)):
