@@ -19,14 +19,25 @@ DEFAULT_OUT_DIR = "output"
 DEFAULT_RES_DIR = "results"
 
 
-def load_defs(path: Path) -> list:
+def load_defs(path: Path, names: list = [], tags: list = []) -> list:
     definitions = []
 
-    if path.is_dir():
-        yaml_files = chain(path.glob("*.yaml"), path.glob("*.yml"))
-        definitions += [yaml.safe_load(f.read_text()) for f in yaml_files]
-    else:
+    if not path.is_dir():
         raise ValueError("Provided path must point to an existing directory.")
+
+    yaml_files = chain(path.glob("*.yaml"), path.glob("*.yml"))
+    for f in yaml_files:
+        dfn = yaml.safe_load(f.read_text())
+
+        if names and dfn.get("name") not in names:
+            continue
+
+        if tags:
+            dfn_tags = dfn.get("tags") or []
+            if not set(tags) & set(dfn_tags):
+                continue
+
+        definitions.append(dfn)
 
     return definitions
 
@@ -108,10 +119,13 @@ def get_param_cli_args(param_dict: dict, param_file: Path) -> list:
     return param_args
 
 
-def generate(def_dir: Path, job_dir: Path, params: dict = None, param_file: Path = None) -> list:
+def generate(
+    def_dir: Path, job_dir: Path, params: dict = {}, param_file: Path = None,
+    names: list = [], tags: list = [],
+) -> list:
     jobs = []
 
-    definitions = load_defs(path=def_dir)
+    definitions = load_defs(def_dir, names, tags)
     if not definitions:
         sys.exit("No test definitions provided.")
 
@@ -136,9 +150,15 @@ def generate(def_dir: Path, job_dir: Path, params: dict = None, param_file: Path
     return jobs
 
 
-def execute(job_dir: Path, out_dir: Path) -> list:
+def execute(
+    def_dir: Path, job_dir: Path, out_dir: Path, names: list = [], tags: list = [],
+) -> list:
     out_files = []
     job_ids = []
+
+    definitions = load_defs(def_dir, names, tags)
+    if not definitions:
+        sys.exit("No test definitions provided.")
 
     timestamp = time.strftime("%Y-%m-%dT%H%M%S")
 
@@ -146,11 +166,16 @@ def execute(job_dir: Path, out_dir: Path) -> list:
     out_dir = out_dir / timestamp
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    for job in job_dir.glob("*.sh"):
-        out_path = out_dir / (job.stem + ".out")
+    for dfn in definitions:
+        job_path = job_dir / (dfn["name"] + ".sh")
+        out_path = out_dir / (dfn["name"] + ".out")
+
+        if not job_path.is_file():
+            print(f"Test '{test_name}': file '{str(job_path)}' not found.")
+            continue
 
         proc = subprocess.run(
-            ["sbatch", "-o", out_path, "--parsable", job],
+            ["sbatch", "-o", out_path, "--parsable", job_path],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             universal_newlines=True,
@@ -163,11 +188,12 @@ def execute(job_dir: Path, out_dir: Path) -> list:
 
 
 def validate(
-    def_dir: Path, out_dir: Path, res_dir: Path, params: dict = None, param_file: Path = None,
+    def_dir: Path, out_dir: Path, res_dir: Path, params: dict = {}, param_file: Path = None,
+    names: list = [], tags: list = [],
 ) -> Path:
     res_files = []
 
-    definitions = load_defs(path=def_dir)
+    definitions = load_defs(def_dir, names, tags)
     if not definitions:
         sys.exit("No test definitions provided.")
 
@@ -193,7 +219,9 @@ def validate(
         validate_fn = get_function_from_string(validate_fn_str) if validate_fn_str else None
 
         if not out_path.is_file():
-            raise ValueError(f"File {str(out_path)} not found.")
+            print(f"Test '{test_name}': file '{str(out_path)}' not found.")
+            continue
+
         text = out_path.read_text()
 
         results = None
@@ -210,8 +238,8 @@ def validate(
 
 
 def run(
-    def_dir: Path, job_dir: Path, out_dir: Path, res_dir: Path, params: dict = None,
-    param_file: Path = None,
+    def_dir: Path, job_dir: Path, out_dir: Path, res_dir: Path, params: dict = {},
+    param_file: Path = None, names: list = [], tags: list = [],
 ) -> str:
     # Get Slurm account from shared params for submitting aggregation job
     shared_params = get_shared_params(param_dict=params, param_file=param_file)
@@ -219,11 +247,12 @@ def run(
     if not account:
         sys.exit("Must provide Slurm account (`account`) as a shared parameter.")
 
-    jobs = generate(def_dir, job_dir, params, param_file)
-    timestamp, out_files, job_ids = execute(job_dir, out_dir)
+    jobs = generate(def_dir, job_dir, params, param_file, names, tags)
+    timestamp, out_files, job_ids = execute(def_dir, job_dir, out_dir, names, tags)
 
     out_dir = out_dir / timestamp
     res_dir = res_dir / out_dir.parts[-1]
+
     param_args = get_param_cli_args(param_dict=params, param_file=param_file)
 
     val_submit_args = [
@@ -235,6 +264,8 @@ def run(
         "#!/bin/bash\n"
         f"{sys.argv[0]} -l -o {out_dir} -s {res_dir} "
         f"{' '.join(shlex.quote(str(arg)) for arg in param_args)} "
+        f"{' '.join('-n ' + n for n in names)} "
+        f"{' '.join('-t ' + t for t in tags)} "
         f"{def_dir}\n"
     )
 
@@ -282,17 +313,32 @@ def main():
         "--param-file", "--pf", type=Path, help="Path to JSON file with shared parameters dict",
     )
 
+    parser.add_argument(
+        "-n", "--name", type=str, default=[], action="append",
+        help="run tests matching this name (repeatable)",
+    )
+    parser.add_argument(
+        "-t", "--tag", type=str, default=[], action="append",
+        help="run tests matching this tag (repeatable)",
+    )
+
     args = parser.parse_args()
 
     if args.gen:
-        results = generate(args.def_dir, args.job_dir, args.params, args.param_file)
+        results = generate(
+            args.def_dir, args.job_dir, args.params, args.param_file, args.name, args.tag,
+        )
     elif args.exe:
-        results = execute(args.job_dir, args.out_dir)
+        results = execute(args.def_dir, args.job_dir, args.out_dir, args.name, args.tag)
     elif args.val:
-        results = validate(args.def_dir, args.out_dir, args.res_dir, args.params, args.param_file)
+        results = validate(
+            args.def_dir, args.out_dir, args.res_dir, args.params,
+            args.param_file, args.name, args.tag,
+        )
     elif args.run:
         results = run(
-            args.def_dir, args.job_dir, args.out_dir, args.res_dir, args.params, args.param_file,
+            args.def_dir, args.job_dir, args.out_dir, args.res_dir,
+            args.params, args.param_file, args.name, args.tag,
         )
     else:
         sys.exit("No operation specified.")
