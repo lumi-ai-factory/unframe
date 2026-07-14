@@ -173,7 +173,7 @@ def validate(
     shared_params = get_shared_params(param_dict=params, param_file=param_file)
 
     out_dir = out_dir
-    res_dir = res_dir / out_dir.parts[-1]
+    res_dir = res_dir
     res_dir.mkdir(parents=True, exist_ok=True)
 
     summary_path = res_dir / "summary.csv"
@@ -222,7 +222,7 @@ def run(
     timestamp, out_files, job_ids = execute(job_dir, out_dir)
 
     out_dir = out_dir / timestamp
-    res_dir = res_dir
+    res_dir = res_dir / out_dir.parts[-1]
 
     args_validate = [
         "srun", "-A", account, "-d", ",".join(job_ids), "-p", "debug",
