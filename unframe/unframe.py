@@ -43,7 +43,7 @@ def get_shared_params(param_dict: dict, param_file: Path) -> dict:
     return params
 
 
-def aggregate_params(test_params: dict, shared_params: dict) -> dict:
+def format_params_bash(test_params: dict, shared_params: dict) -> dict:
     params = {}
 
     for d in shared_params, test_params:  # Test params take precedence
@@ -113,7 +113,7 @@ def generate(def_dir: Path, job_dir: Path, params: dict = None, param_file: Path
 
     for dfn in definitions:
         template = env.from_string(dfn["job"])
-        params = aggregate_params(test_params=dfn.get("params"), shared_params=shared_params)
+        params = format_params_bash(test_params=dfn.get("params"), shared_params=shared_params)
         job_string = template.render(params=params, command=dfn["command"])
 
         script_file = job_dir / (dfn["name"] + ".sh")
