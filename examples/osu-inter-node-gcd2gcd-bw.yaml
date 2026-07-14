@@ -61,7 +61,7 @@ parse: |
       lines = text.splitlines()
       for i in range(len(results)):
           rank0_gcd, rank1_gcd, transfer_size = results[i].values()
-          param_pattern = param_template.format(
+          param_pattern = PARAM_TEMPLATE.format(
               rank0_gcd=rank0_gcd, rank1_gcd=rank1_gcd, transfer_size=transfer_size,
           )
           bw_pattern = BW_TEMPLATE.format(transfer_size=transfer_size)
