@@ -128,10 +128,10 @@ def generate(def_dir: Path, job_dir: Path, params: dict = None, param_file: Path
         params = format_params_bash(test_params=dfn.get("params"), shared_params=shared_params)
         job_string = template.render(params=params, command=dfn["command"])
 
-        script_file = job_dir / (dfn["name"] + ".sh")
-        with script_file.open(mode="w") as f:
+        job_file = job_dir / (dfn["name"] + ".sh")
+        with job_file.open(mode="w") as f:
             f.write(job_string)
-        jobs.append(str(script_file))
+        jobs.append(str(job_file))
 
     return jobs
 
@@ -146,11 +146,11 @@ def execute(job_dir: Path, out_dir: Path) -> list:
     out_dir = out_dir / timestamp
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    for script in job_dir.glob("*.sh"):
-        out_path = out_dir / (script.stem + ".out")
+    for job in job_dir.glob("*.sh"):
+        out_path = out_dir / (job.stem + ".out")
 
         proc = subprocess.run(
-            ["sbatch", "-o", out_path, "--parsable", script],
+            ["sbatch", "-o", out_path, "--parsable", job],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             universal_newlines=True,
