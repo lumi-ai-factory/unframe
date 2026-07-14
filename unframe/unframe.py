@@ -212,7 +212,7 @@ def validate(
 def run(
     def_dir: Path, job_dir: Path, out_dir: Path, res_dir: Path, params: dict = None,
     param_file: Path = None,
-):
+) -> str:
     # Get Slurm account from shared params for submitting aggregation job
     shared_params = get_shared_params(param_dict=params, param_file=param_file)
     account = shared_params.get("account")
@@ -247,9 +247,9 @@ def run(
     )
     outs, errs = proc.communicate(val_script_str)
 
-    summary_path = outs.strip()
+    val_job_id = outs.strip()
 
-    return summary_path
+    return val_job_id
 
 
 def main():
