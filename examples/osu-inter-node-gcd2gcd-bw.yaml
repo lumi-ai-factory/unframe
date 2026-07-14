@@ -46,40 +46,55 @@ command: |
 # Result parsing function parses stdout from the command and retuns anything
 # the corresponding validate function can parse: parse(text, params) -> any type
 parse: |
-  def parse(text, params):
+  def parse(text: str, params: dict) -> list:
       import re
-      # last float in output = bandwidth MB/s (OSU format)
-      bw = None
-      for line in reversed(text.splitlines()):
-          m = re.search(r"([0-9]+\.[0-9]+)", line)
-          if m:
-              bw = float(m.group(1))
-              break
-      # include the params in the results so validate can reason on them
-      return {
-          "rank0_gcd": params["rank0_gcd"],
-          "rank1_gcd": params["rank1_gcd"],
-          "transfer_size": params["transfer_size"],
-          "bandwidth_MBps": bw,
-      }
+      from itertools import product
+
+      BW_TEMPLATE = r"{transfer_size}\s+([0-9]+\.[0-9]+)"
+
+      results = [
+          {"rank0_gcd": r0, "rank1_gcd": r1, "transfer_size": ts}
+          for (r0, r1, ts) in product(*params.values())
+      ]
+
+      lines = text.splitlines()
+      for i in range(len(results)):
+          rank0_gcd, rank1_gcd, transfer_size = results[i].values()
+          param_pattern = f"{rank0_gcd=},{rank1_gcd=},{transfer_size=}"
+          bw_pattern = BW_TEMPLATE.format(transfer_size=transfer_size)
+
+          for j in range(len(lines)):
+              if lines[j] == param_pattern:
+                  for k in range(j+1, len(lines)):
+                      m = re.fullmatch(bw_pattern, lines[k])
+                      if m:
+                          results[i]["bandwidth_MBps"] = float(m.group(1))
+                          break
+                  break
+
+      return results
 
 # Validate function validates anything the corresponding parse function produces.
-# validate(results, params) -> bool OR (bool, message)
+# validate(results, params) -> bool OR (bool, list)
 validate: |
-  def validate(results, params):
-      a = params["rank0_gcd"]
-      b = params["rank1_gcd"]
-      sz = params["transfer_size"]
-      bw = results.get("bandwidth_MBps")
-
-      if bw is None:
-          return (False, "no bandwidth parsed")
-
+  def validate(results: list, params: dict):
       # Slingshot 11 is 200 gbit/s per nic, which in MB/s is:
       # ((200 * 1000) mbit/s) / (8 bits per byte) = 25000 MB/s
       # With 5% overhead: 25000 MB/s * 0.95 = 23750 MB/s
-      threshold = 23750
+      THRESHOLD = 23750
 
-      ok = bw >= threshold
-      msg = "min={} MB/s, got {:.1f} MB/s".format(threshold, bw)
-      return (ok, msg)
+      all_ok = True
+
+      for r in results:
+          bw = r.get("bandwidth_MBps")
+
+          if bw is None:
+              r.update({"status": 1, "message": "no bandwidth parsed"})
+              all_ok = False
+          else:
+              ok = bw >= THRESHOLD
+              msg = "min={} MB/s, got {:.1f} MB/s".format(THRESHOLD, bw)
+              r.update({"status": 0 if ok else 1, "message": msg})
+              all_ok = ok
+
+      return (all_ok, results)

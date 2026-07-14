@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import argparse
+import csv
 import json
 import subprocess
 import sys
@@ -53,6 +54,46 @@ def aggregate_params(test_params: dict, shared_params: dict) -> dict:
                 params[k] = v
 
     return params
+
+
+def get_function_from_string(function_string):
+    namespace = {}
+    exec(function_string, namespace)
+    return list(namespace.values())[-1]
+
+
+def log_results(results, res_path: Path, timestamp: str, test_name: str = ""):
+    fieldnames = ["time"]
+    base_row = {"time": timestamp}
+
+    if test_name:
+        fieldnames += ["name"]
+        base_row["name"] = test_name
+
+    fieldnames += ["status"]
+
+    if isinstance(results, tuple):
+        fieldnames += [key for key in results[1][0].keys() if key not in fieldnames]
+
+    write_header = False if res_path.exists() else True
+
+    with open(res_path, "a") as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+        if write_header:
+            writer.writeheader()
+
+        if isinstance(results, bool):
+            row = base_row.copy()
+            row["status"] = 0 if results else 1
+            writer.writerow(row)
+        elif isinstance(results, tuple):
+            for r in results[1]:
+                row = base_row.copy()
+                row.update(r)
+                writer.writerow(row)
+        else:
+            raise TypeError(f"Unknown result type: {type(results)}")
 
 
 def generate(def_dir: Path, job_dir: Path, params: dict = None, param_file: Path = None) -> list:
@@ -110,8 +151,49 @@ def execute(job_dir: Path, out_dir: Path) -> list:
 
 def validate(
     def_dir: Path, out_dir: Path, res_dir: Path, params: dict = None, param_file: Path = None,
-):
-    raise NotImplementedError
+) -> Path:
+    res_files = []
+
+    definitions = load_defs(path=def_dir)
+    if not definitions:
+        sys.exit("No test definitions provided.")
+
+    shared_params = get_shared_params(param_dict=params, param_file=param_file)
+
+    out_dir = out_dir
+    res_dir = res_dir / out_dir.parts[-1]
+    res_dir.mkdir(parents=True, exist_ok=True)
+
+    summary_path = res_dir / "summary.csv"
+
+    for dfn in definitions:
+        test_name = dfn["name"]
+        params = dfn.get("params")
+
+        out_path = out_dir / (test_name + ".out")
+        res_path = res_dir / (test_name + ".csv")
+
+        parse_fn_str = dfn.get("parse")
+        validate_fn_str = dfn.get("validate")
+
+        parse_fn = get_function_from_string(parse_fn_str) if parse_fn_str else None
+        validate_fn = get_function_from_string(validate_fn_str) if validate_fn_str else None
+
+        if not out_path.is_file():
+            raise ValueError(f"File {str(out_path)} not found.")
+        text = out_path.read_text()
+
+        results = None
+        if parse_fn:
+            results = parse_fn(text, params)
+        if validate_fn:
+            results = validate_fn(results, params)
+
+        timestamp = time.strftime("%Y-%m-%dT%H:%M:%S")
+        log_results(results, res_path, timestamp)
+        log_results(results[0], summary_path, timestamp, test_name)
+
+    return summary_path
 
 
 def run(
