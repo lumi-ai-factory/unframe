@@ -98,6 +98,6 @@ validate: |
               ok = bw >= THRESHOLD
               msg = "min={} MB/s, got {:.1f} MB/s".format(THRESHOLD, bw)
               r.update({"status": 0 if ok else 1, "message": msg})
-              all_ok = ok
+              all_ok = all_ok and ok
 
       return (all_ok, results)
