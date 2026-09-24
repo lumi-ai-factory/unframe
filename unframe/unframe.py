@@ -59,6 +59,8 @@ def format_params_bash(test_params: dict, shared_params: dict) -> dict:
     params = {}
 
     for d in shared_params, test_params:  # Test params take precedence
+        if not d:
+            continue
         for k, v in d.items():
             if isinstance(v, list):
                 params[k] = " ".join([f'"{x}"' for x in v])
